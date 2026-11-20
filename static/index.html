@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Research Swarm</title>
+  <script src="https://cdn.tailwindcss.com/3.4.13"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/14.1.2/marked.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root { color-scheme: dark; }
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #070a12; }
+    .aurora {
+      background:
+        radial-gradient(60rem 40rem at 15% -10%, rgba(99,102,241,.18), transparent 60%),
+        radial-gradient(50rem 40rem at 95% 0%, rgba(16,185,129,.14), transparent 55%),
+        radial-gradient(40rem 30rem at 50% 120%, rgba(236,72,153,.12), transparent 60%);
+    }
+    .glass {
+      background: rgba(255,255,255,.035);
+      border: 1px solid rgba(255,255,255,.08);
+      backdrop-filter: blur(12px);
+    }
+    .glass:hover { border-color: rgba(255,255,255,.16); }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 99px; }
+    @keyframes pulsering { 0%{box-shadow:0 0 0 0 rgba(99,102,241,.5)} 70%{box-shadow:0 0 0 10px rgba(99,102,241,0)} 100%{box-shadow:0 0 0 0 rgba(99,102,241,0)} }
+    .running { animation: pulsering 1.6s infinite; }
+    @keyframes fadein { from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:none} }
+    .logline { animation: fadein .25s ease both; }
+    .prose-report h1,.prose-report h2,.prose-report h3 { font-weight:700; margin:1.1em 0 .5em; line-height:1.25; }
+    .prose-report h1 { font-size:1.6rem } .prose-report h2 { font-size:1.3rem; color:#c7d2fe }
+    .prose-report h3 { font-size:1.1rem }
+    .prose-report p { margin:.6em 0; line-height:1.7; color:#cbd5e1 }
+    .prose-report ul { margin:.5em 0 .9em; padding-left:1.3em; list-style:disc; color:#cbd5e1 }
+    .prose-report li { margin:.3em 0 }
+    .prose-report a { color:#818cf8; text-decoration:underline; text-underline-offset:2px }
+    .prose-report a:hover { color:#a5b4fc }
+    .prose-report code { background:rgba(255,255,255,.08); padding:.1em .35em; border-radius:4px; font-size:.9em }
+    .prose-report strong { color:#e2e8f0 }
+  </style>
+</head>
+<body class="aurora min-h-screen text-slate-200">
+  <main class="max-w-5xl mx-auto px-4 py-10 md:py-16">
+
+    <!-- Hero -->
+    <header class="text-center mb-10">
+      <div class="inline-flex items-center gap-2 text-xs font-medium tracking-wide text-indigo-300/80 glass rounded-full px-3 py-1 mb-5">
+        <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+        Multi-Agent · LangGraph · Groq · Tavily
+      </div>
+      <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-white via-indigo-200 to-indigo-400 bg-clip-text text-transparent">
+        Research&nbsp;Swarm
+      </h1>
+      <p class="mt-3 text-slate-400 max-w-xl mx-auto">
+        A team of specialized AI agents plans, searches the web, summarizes,
+        fact-checks, and writes a cited report — live.
+      </p>
+    </header>
+
+    <!-- Search -->
+    <form id="form" class="glass rounded-2xl p-2 flex flex-col sm:flex-row gap-2 shadow-2xl shadow-black/40">
+      <input id="q" type="text" autocomplete="off"
+        placeholder="Ask a research question…"
+        class="flex-1 bg-transparent px-4 py-3 text-base outline-none placeholder:text-slate-500" />
+      <button id="go" type="submit"
+        class="shrink-0 rounded-xl px-6 py-3 font-semibold bg-indigo-500 hover:bg-indigo-400 transition text-white disabled:opacity-50 disabled:cursor-not-allowed">
+        Research
+      </button>
+    </form>
+    <div class="mt-3 flex flex-wrap gap-2" id="examples"></div>
+
+    <!-- Pipeline -->
+    <section id="pipeline" class="mt-10 grid grid-cols-2 sm:grid-cols-5 gap-3"></section>
+
+    <!-- Live log + Report -->
+    <section class="mt-6 grid lg:grid-cols-5 gap-5">
+      <div class="lg:col-span-2 glass rounded-2xl p-4 flex flex-col">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full bg-indigo-400"></span> Activity
+        </h2>
+        <div id="log" class="space-y-2 overflow-y-auto max-h-[28rem] pr-1 text-sm text-slate-400">
+          <p class="text-slate-600">Agent activity will stream here…</p>
+        </div>
+      </div>
+      <div class="lg:col-span-3 glass rounded-2xl p-6 min-h-[16rem]">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full bg-emerald-400"></span> Report
+        </h2>
+        <div id="report" class="prose-report">
+          <p class="text-slate-600">The final cited report will appear here.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const AGENTS = [
+      { key: "planner",     label: "Planner",      icon: "🧭" },
+      { key: "searcher",    label: "Searcher",     icon: "🔎" },
+      { key: "summarizer",  label: "Summarizer",   icon: "📝" },
+      { key: "factchecker", label: "Fact-Checker", icon: "✅" },
+      { key: "writer",      label: "Writer",       icon: "✍️" },
+    ];
+    const ORDER = AGENTS.map(a => a.key);
+    const EXAMPLES = [
+      "What are the main approaches to carbon capture and their trade-offs?",
+      "How do LLM agents use tool calling, and what are the risks?",
+      "Compare solid-state vs lithium-ion batteries for EVs.",
+    ];
+
+    const $ = s => document.querySelector(s);
+    const pipelineEl = $("#pipeline");
+    const logEl = $("#log");
+    const reportEl = $("#report");
+    const qEl = $("#q");
+    const goEl = $("#go");
+
+    // Build pipeline cards
+    const cards = {};
+    AGENTS.forEach((a, i) => {
+      const el = document.createElement("div");
+      el.className = "glass rounded-xl p-3 transition relative";
+      el.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="text-xl">${a.icon}</span>
+          <span class="dot h-2.5 w-2.5 rounded-full bg-slate-600"></span>
+        </div>
+        <div class="mt-2 text-sm font-semibold text-slate-200">${a.label}</div>
+        <div class="state text-[11px] text-slate-500 mt-0.5">idle</div>`;
+      pipelineEl.appendChild(el);
+      cards[a.key] = el;
+    });
+
+    // Example chips
+    EXAMPLES.forEach(ex => {
+      const b = document.createElement("button");
+      b.className = "text-xs glass rounded-full px-3 py-1.5 text-slate-400 hover:text-slate-200 transition";
+      b.textContent = ex;
+      b.onclick = () => { qEl.value = ex; };
+      $("#examples").appendChild(b);
+    });
+
+    function setCard(key, status) {
+      const el = cards[key];
+      if (!el) return;
+      const dot = el.querySelector(".dot");
+      const state = el.querySelector(".state");
+      el.classList.remove("running");
+      dot.className = "dot h-2.5 w-2.5 rounded-full";
+      if (status === "running") {
+        dot.classList.add("bg-indigo-400", "running");
+        state.textContent = "working…"; state.className = "state text-[11px] text-indigo-300 mt-0.5";
+        el.classList.add("running");
+      } else if (status === "done") {
+        dot.classList.add("bg-emerald-400");
+        state.textContent = "done"; state.className = "state text-[11px] text-emerald-400 mt-0.5";
+      } else if (status === "error") {
+        dot.classList.add("bg-rose-500");
+        state.textContent = "error"; state.className = "state text-[11px] text-rose-400 mt-0.5";
+      } else {
+        dot.classList.add("bg-slate-600");
+        state.textContent = "idle"; state.className = "state text-[11px] text-slate-500 mt-0.5";
+      }
+    }
+
+    // When an agent starts, mark all earlier agents done (clean progression)
+    function advance(key, status) {
+      const idx = ORDER.indexOf(key);
+      if (status === "running" && idx > 0) {
+        for (let i = 0; i < idx; i++) {
+          const prev = cards[ORDER[i]];
+          if (prev.querySelector(".state").textContent !== "done") setCard(ORDER[i], "done");
+        }
+      }
+      setCard(key, status);
+    }
+
+    function resetUI() {
+      ORDER.forEach(k => setCard(k, "idle"));
+      logEl.innerHTML = "";
+      reportEl.innerHTML = '<p class="text-slate-600">Working… the report will appear when the Writer finishes.</p>';
+    }
+
+    function addLog(agent, message, kind) {
+      const color = kind === "error" ? "text-rose-400"
+        : kind === "done" ? "text-emerald-300" : "text-slate-300";
+      const name = (AGENTS.find(a => a.key === agent) || {}).label || agent || "system";
+      const row = document.createElement("div");
+      row.className = "logline flex gap-2";
+      row.innerHTML = `<span class="shrink-0 text-[11px] uppercase tracking-wide text-slate-500 w-20">${name}</span>
+                       <span class="${color}">${escapeHtml(message)}</span>`;
+      logEl.appendChild(row);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    let es = null;
+    function run(query) {
+      if (es) es.close();
+      resetUI();
+      goEl.disabled = true; goEl.textContent = "Researching…";
+
+      es = new EventSource("/api/research?q=" + encodeURIComponent(query));
+
+      es.addEventListener("progress", e => {
+        const d = JSON.parse(e.data);
+        advance(d.agent, d.status);
+        addLog(d.agent, d.message, d.status);
+      });
+      es.addEventListener("report", e => {
+        const d = JSON.parse(e.data);
+        reportEl.innerHTML = marked.parse(d.report || "");
+        reportEl.querySelectorAll("a").forEach(a => { a.target = "_blank"; a.rel = "noopener"; });
+      });
+      es.addEventListener("error", e => {
+        let msg = "Stream error.";
+        try { msg = JSON.parse(e.data).message; } catch (_) {}
+        addLog("system", msg, "error");
+        finish();
+      });
+      es.addEventListener("done", () => {
+        ORDER.forEach(k => { if (cards[k].querySelector(".state").textContent !== "error") setCard(k, "done"); });
+        addLog("system", "Finished.", "done");
+        finish();
+      });
+    }
+
+    function finish() {
+      goEl.disabled = false; goEl.textContent = "Research";
+      if (es) { es.close(); es = null; }
+    }
+
+    $("#form").addEventListener("submit", e => {
+      e.preventDefault();
+      const query = qEl.value.trim();
+      if (query.length < 3) { qEl.focus(); return; }
+      run(query);
+    });
+  </script>
+</body>
+</html>

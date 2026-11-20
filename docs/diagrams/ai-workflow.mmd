@@ -1,0 +1,64 @@
+stateDiagram-v2
+    [*] --> Planner
+
+    state "Planner" as Planner {
+        [*] --> ReceiveQuery
+        ReceiveQuery --> LLMPlan: Invoke ChatGroq
+        LLMPlan --> ParseJSON: Parse JSON array
+        ParseJSON --> ValidateQuestions
+        ValidateQuestions --> EmitSubQuestions: Valid list
+        ValidateQuestions --> FallbackOriginal: Parse failure
+        FallbackOriginal --> EmitSubQuestions
+    }
+
+    Planner --> FanOut: Send() per sub-question
+
+    state "Fan-Out Search" as FanOut {
+        [*] --> ParallelSearchers
+        state ParallelSearchers <<fork>>
+        ParallelSearchers --> Searcher1: Sub-question 1
+        ParallelSearchers --> Searcher2: Sub-question 2
+        ParallelSearchers --> SearcherN: Sub-question N
+        Searcher1 --> JoinResults
+        Searcher2 --> JoinResults
+        SearcherN --> JoinResults
+        state JoinResults <<join>>
+    }
+
+    FanOut --> Summarizer: Merged search_results (reducer)
+
+    state "Summarizer" as Summarizer {
+        [*] --> BuildContext
+        BuildContext --> LLMSummarize: Invoke ChatGroq
+        LLMSummarize --> EmitFindings
+    }
+
+    Summarizer --> FactChecker
+
+    state "Fact-Checker" as FactChecker {
+        [*] --> ReviewFindings
+        ReviewFindings --> LLMVerify: Invoke ChatGroq (temp=0.0)
+        LLMVerify --> ParseVerdict
+        ParseVerdict --> DecideRoute
+    }
+
+    state decision <<choice>>
+    FactChecker --> decision
+    decision --> Refine: needs_more AND retries < max
+    decision --> Writer: pass OR retries exhausted
+
+    state "Refine" as Refine {
+        [*] --> SetGapsAsSubQuestions
+        SetGapsAsSubQuestions --> IncrementRetries
+    }
+
+    Refine --> FanOut: Loop back
+
+    state "Writer" as Writer {
+        [*] --> CollectSources
+        CollectSources --> DeduplicateURLs
+        DeduplicateURLs --> LLMWrite: Invoke ChatGroq
+        LLMWrite --> EmitReport
+    }
+
+    Writer --> [*]

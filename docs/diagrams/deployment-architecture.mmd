@@ -1,0 +1,31 @@
+graph LR
+    subgraph Local["Local Development Machine"]
+        subgraph Python["Python 3.12 Virtual Environment"]
+            Uvicorn["Uvicorn ASGI Server<br/>Port 8000"]
+            FastAPI["FastAPI Application"]
+            LangGraph["LangGraph Runtime"]
+        end
+
+        subgraph Files["Project Files"]
+            EnvFile[".env<br/>API Keys + Config"]
+            StaticDir["static/<br/>index.html"]
+            AppDir["app/<br/>Python Modules"]
+        end
+    end
+
+    subgraph External["External APIs (Cloud)"]
+        Groq["Groq Cloud API<br/>api.groq.com<br/>LLM Inference"]
+        Tavily["Tavily API<br/>api.tavily.com<br/>Web Search"]
+    end
+
+    subgraph Client["Client"]
+        Browser["Web Browser<br/>localhost:8000"]
+    end
+
+    Browser -->|"HTTP / SSE"| Uvicorn
+    Uvicorn --> FastAPI
+    FastAPI --> LangGraph
+    FastAPI -->|"Serves"| StaticDir
+    EnvFile -->|"Loaded by"| FastAPI
+    LangGraph -->|"HTTPS"| Groq
+    LangGraph -->|"HTTPS"| Tavily

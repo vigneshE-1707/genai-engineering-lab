@@ -1,0 +1,66 @@
+sequenceDiagram
+    actor User
+    participant Browser as Browser (index.html)
+    participant FastAPI as FastAPI Server
+    participant Graph as LangGraph Engine
+    participant Planner as Planner Agent
+    participant Searcher as Searcher Agent(s)
+    participant Summarizer as Summarizer Agent
+    participant FactChecker as Fact-Checker Agent
+    participant Writer as Writer Agent
+    participant Groq as Groq API
+    participant Tavily as Tavily API
+
+    User->>Browser: Enter research question
+    Browser->>FastAPI: GET /api/research?q=...
+    FastAPI->>FastAPI: Validate API keys present
+
+    alt Keys missing
+        FastAPI-->>Browser: SSE error: "Missing API keys"
+    end
+
+    FastAPI->>Graph: graph.astream({query, retries: 0})
+    Graph->>Planner: Invoke planner node
+    Planner-->>Browser: SSE progress: "Planning research..."
+    Planner->>Groq: LLM call (PLANNER_SYS prompt)
+    Groq-->>Planner: JSON array of sub-questions
+    Planner->>Planner: parse_subquestions()
+    Planner-->>Browser: SSE progress: "Drafted N sub-question(s)"
+
+    loop For each sub-question (parallel via Send)
+        Graph->>Searcher: Invoke searcher node
+        Searcher-->>Browser: SSE progress: "Searching: ..."
+        Searcher->>Tavily: Web search query
+        Tavily-->>Searcher: Search results (title, url, content)
+        Searcher-->>Browser: SSE progress: "Found N source(s)"
+    end
+
+    Graph->>Summarizer: Invoke summarizer node
+    Summarizer-->>Browser: SSE progress: "Summarizing findings..."
+    Summarizer->>Groq: LLM call (SUMMARIZER_SYS prompt)
+    Groq-->>Summarizer: Condensed findings
+    Summarizer-->>Browser: SSE progress: "Key findings compiled"
+
+    Graph->>FactChecker: Invoke fact_checker node
+    FactChecker-->>Browser: SSE progress: "Verifying claims..."
+    FactChecker->>Groq: LLM call (FACTCHECK_SYS, temp=0.0)
+    Groq-->>FactChecker: {verdict, gaps}
+    FactChecker->>FactChecker: parse_verdict()
+    FactChecker-->>Browser: SSE progress: "Verdict: ..."
+
+    alt verdict == "needs_more" AND retries < max
+        Graph->>Graph: refine node (increment retries)
+        Note over Graph,Searcher: Loop back through Search → Summarize → Fact-Check
+    end
+
+    Graph->>Writer: Invoke writer node
+    Writer-->>Browser: SSE progress: "Writing final report"
+    Writer->>Groq: LLM call (WRITER_SYS prompt)
+    Groq-->>Writer: Markdown report
+    Writer-->>Browser: SSE progress: "Report ready"
+
+    Graph-->>FastAPI: State update with report
+    FastAPI-->>Browser: SSE report event
+    FastAPI-->>Browser: SSE done event
+    Browser->>Browser: marked.parse(report)
+    Browser->>User: Display rendered report

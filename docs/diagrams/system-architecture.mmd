@@ -1,0 +1,63 @@
+graph TB
+    subgraph Frontend["Frontend (Browser)"]
+        UI["Single-Page HTML UI<br/>Tailwind CSS + Vanilla JS"]
+        ES["EventSource Client<br/>SSE Listener"]
+        MD["Marked.js<br/>Markdown Renderer"]
+    end
+
+    subgraph Backend["Backend (FastAPI)"]
+        API["FastAPI Server<br/>uvicorn"]
+        SSE["SSE Endpoint<br/>/api/research"]
+        Health["Health Check<br/>/api/health"]
+        Static["Static File Server<br/>/static"]
+    end
+
+    subgraph Orchestration["AI Orchestration (LangGraph)"]
+        Graph["StateGraph<br/>Compiled Graph"]
+        State["ResearchState<br/>TypedDict + Reducers"]
+    end
+
+    subgraph Agents["Agent Nodes"]
+        Planner["Planner Agent"]
+        Searcher["Searcher Agent<br/>(Parallel Fan-Out)"]
+        Summarizer["Summarizer Agent"]
+        FactChecker["Fact-Checker Agent"]
+        Refine["Refine Node"]
+        Writer["Writer Agent"]
+    end
+
+    subgraph External["External Services"]
+        Groq["Groq API<br/>LLM Inference"]
+        Tavily["Tavily API<br/>Web Search"]
+    end
+
+    subgraph Config["Configuration"]
+        Env[".env File<br/>API Keys + Settings"]
+        Settings["Pydantic Settings<br/>config.py"]
+    end
+
+    UI -->|"HTTP GET /api/research?q=..."| SSE
+    SSE -->|"SSE Events<br/>progress, report, done, error"| ES
+    ES --> UI
+    UI --> MD
+
+    SSE --> Graph
+    Graph --> State
+    Graph --> Planner
+    Planner -->|"Send per sub-question"| Searcher
+    Searcher --> Summarizer
+    Summarizer --> FactChecker
+    FactChecker -->|"gaps found"| Refine
+    Refine -->|"Send per gap"| Searcher
+    FactChecker -->|"pass"| Writer
+
+    Planner --> Groq
+    Summarizer --> Groq
+    FactChecker --> Groq
+    Writer --> Groq
+    Searcher --> Tavily
+
+    Env --> Settings
+    Settings --> API
+    Settings --> Groq
+    Settings --> Tavily

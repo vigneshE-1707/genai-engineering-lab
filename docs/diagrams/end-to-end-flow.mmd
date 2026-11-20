@@ -1,0 +1,43 @@
+flowchart TD
+    A["User enters research question<br/>in browser UI"] --> B["Form submit event<br/>index.html JS"]
+    B --> C["EventSource opens SSE connection<br/>GET /api/research?q=..."]
+    C --> D{"API keys<br/>present?"}
+    D -->|No| E["Return SSE error event<br/>'Missing API keys'"]
+    D -->|Yes| F["Initialize graph.astream()<br/>stream_mode: custom + updates"]
+
+    F --> G["Planner Node<br/>agents.planner()"]
+    G --> G1["LLM call: Break query into<br/>sub-questions (JSON array)"]
+    G1 --> G2["Parse sub-questions<br/>parse_subquestions()"]
+    G2 --> G3{"Valid<br/>sub-questions?"}
+    G3 -->|No| G4["Fallback: use original query<br/>as single sub-question"]
+    G3 -->|Yes| H["Fan-out via Send()<br/>fan_out_searches()"]
+    G4 --> H
+
+    H --> I["Searcher Nodes (Parallel)<br/>agents.searcher()"]
+    I --> I1["Tavily web search<br/>per sub-question"]
+    I1 --> I2{"Search<br/>succeeded?"}
+    I2 -->|No| I3["Return empty results<br/>with error log"]
+    I2 -->|Yes| I4["Extract sources + content<br/>Append to search_results"]
+    I3 --> J
+    I4 --> J
+
+    J["Summarizer Node<br/>agents.summarizer()"] --> J1["LLM call: Condense results<br/>into key findings with citations"]
+    J1 --> K["Fact-Checker Node<br/>agents.fact_checker()"]
+    K --> K1["LLM call (temp=0.0): Verify claims<br/>Return verdict JSON"]
+    K1 --> K2["Parse verdict<br/>parse_verdict()"]
+    K2 --> L{"verdict == 'needs_more'<br/>AND retries < max?"}
+
+    L -->|Yes| M["Refine Node<br/>agents.refine()"]
+    M --> M1["Set gaps as new sub_questions<br/>Increment retries"]
+    M1 --> H
+
+    L -->|No| N["Writer Node<br/>agents.writer_node()"]
+    N --> N1["LLM call: Write cited<br/>Markdown report"]
+    N1 --> O["Return report in state<br/>SSE 'report' event"]
+    O --> P["SSE 'done' event"]
+    P --> Q["Browser renders Markdown<br/>via marked.parse()"]
+
+    style A fill:#4f46e5,color:#fff
+    style Q fill:#10b981,color:#fff
+    style E fill:#ef4444,color:#fff
+    style I3 fill:#f59e0b,color:#000
